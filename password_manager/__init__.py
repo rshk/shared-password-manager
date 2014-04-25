@@ -13,6 +13,10 @@ from Crypto.Cipher import AES
 from Crypto import Random
 
 
+class PasswordManagerException(Exception):
+    pass
+
+
 class PasswordManager(object):
     def __init__(self, basedir, gpghome=None):
         self.basedir = basedir
@@ -81,7 +85,8 @@ class PasswordManager(object):
             user_keys = set(self.list_identities())
             common_keys = our_keys.intersection(user_keys)
             if len(common_keys) < 1:
-                raise ValueError("Unable to find a key for decryption!")
+                raise PasswordManagerException(
+                    "Unable to find a key for decryption!")
             identity = common_keys.pop()
 
         return self.read_aes_key(identity)
@@ -139,7 +144,7 @@ class PasswordManager(object):
 
         for secret in self.list_secrets():
             secret_data = self.read_secret(secret, key=old_aes_key)
-            self.write_secret(secret_data, key=new_aes_key)
+            self.write_secret(secret, secret_data, key=new_aes_key)
 
         # todo: now iterate all the password files and recrypt them
 
