@@ -10,19 +10,10 @@ Tests for password manager
 import os
 import json
 
-import pytest
 import gnupg
 
 from Crypto.Cipher import AES
 from Crypto import Random
-
-
-# @pytest.fixture
-# def gpg(tmpdir):
-#     return gnupg.GPG(gnupghome=str(tmpdir))
-
-
-#gpg.gen_key_input(key_type="RSA", key_length=1024)
 
 
 def test_encrypt_key_between_users(tmpdir):
