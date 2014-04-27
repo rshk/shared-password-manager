@@ -5,32 +5,32 @@ import pytest
 
 from password_manager import PasswordManager, PasswordManagerException
 
+# From test utils!
+from utils import get_gpg
 
-@pytest.mark.skipif(True, reason='WIP')
-def test_oneuser(tmpdir):
+
+def test_oneuser(tmpdir, keyfiles):
     # ------------------------------------------------------------
     # Create a dummy gpg keyring
 
-    gpg = gnupg.GPG(gnupghome=str(tmpdir.join('gnupg')))
+    gpg = get_gpg(str(tmpdir.join('gnupg')))
 
-    assert len(gpg.list_keys()) == 0
-    assert len(gpg.list_keys(True)) == 0
+    assert len(list(gpg.keylist())) == 0
+    assert len(list(gpg.keylist('', True))) == 0
 
     # Import some keys in keyring
 
-    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
     for keyname in ('key1.sec', 'key1.pub', 'key2.pub'):
-        with open(os.path.join(keysdir, keyname), 'r') as f:
-            gpg.import_keys(f.read())
+        with keyfiles.open(keyname, 'rb') as fp:
+            gpg.import_(fp)
 
-    assert len(gpg.list_keys()) == 2
-    assert len(gpg.list_keys(True)) == 1
+    assert len(list(gpg.keylist())) == 2  # public
+    assert len(list(gpg.keylist('', True))) == 1  # secret
 
     # Read fingerprints of the user's private key and other
     # available public keys.
 
-    privkey = gpg.list_keys(True)[0]['fingerprint']
-    # pubkeys = [x['fingerprint'] for x in gpg.list_keys()]
+    privkey = list(gpg.keylist('', True))[0].subkeys[0].fpr
 
     # ------------------------------------------------------------
     # Prepare password manager

@@ -7,6 +7,7 @@ to encrypt them for multiple users.
 
 import json
 import os
+from io import BytesIO
 
 # import gnupg
 import gpgme
@@ -103,25 +104,23 @@ class PasswordManager(object):
     def read_aes_key(self, identity):
         """Read the AES key, using the selected identity"""
 
-        with open(self.get_aes_key_filename(identity), 'rb') as f:
-            data = f.read()
-
-        # Decrypt and return
-        gpg = self.get_gpg()
-        return gpg.decrypt(data).data
+        _io = BytesIO()
+        gpg = self._get_gpg()
+        with open(self.get_aes_key_filename(identity), 'rb') as fp:
+            gpg.decrypt(fp, _io)
+        return _io.getvalue()
 
     def write_aes_key(self, aes_key, identity):
         """Store the AES key, encrypted for a given identity"""
 
-        gpg = self.get_gpg()
+        gpg = self._get_gpg()
+        key = gpg.get_key(identity)
 
-        # todo: using ``always_trust`` here is sub-optimal!
-        #       find some better way (tell the user how to change
-        #       trust, ..)
-        encrypted = gpg.encrypt(aes_key, identity, always_trust=True)
+        # todo: tell the user to trust more people!
+        flags = gpgme.ENCRYPT_ALWAYS_TRUST
 
-        with open(self.get_aes_key_filename(identity), 'wb') as f:
-            f.write(encrypted.data)
+        with open(self.get_aes_key_filename(identity), 'wb') as fp:
+            gpg.encrypt([key], flags, BytesIO(aes_key), fp)
 
     def regenerate_aes_key(self):
         """
@@ -187,8 +186,8 @@ class PasswordManager(object):
         """
 
         ctx = gpgme.Context()
-        if self.gnupghome is not None:
-            ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, self.gnupghome)
+        if self.gpghome is not None:
+            ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, self.gpghome)
         return ctx
 
     def _get_key_fingerprint(self, name):
@@ -219,19 +218,17 @@ class PasswordManager(object):
         """Export a GPG public key"""
 
         identity = self._get_key_fingerprint(identity)
-
-        gpg = self.get_gpg()
-        exported = gpg.export_keys(identity)
-        with open(self.get_gpg_pubkey_filename(identity), 'wb') as f:
-            f.write(exported)
+        gpg = self._get_gpg()
+        with open(self.get_gpg_pubkey_filename(identity), 'wb') as fp:
+            gpg.export(identity, fp)
 
     def import_all_pubkeys(self):
         # todo: do this in a better way
         gpg = self._get_gpg()
         for identity in self.list_identities():
             pubkeyfile = self.get_gpg_pubkey_filename(identity)
-            with open(pubkeyfile, 'rb') as f:
-                gpg.import_(f.read())
+            with open(pubkeyfile, 'rb') as fp:
+                gpg.import_(fp)
 
     # ----------------------------------------------------------------------
     #   High-level operations
