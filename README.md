@@ -105,7 +105,7 @@ two branches that use different AES keys.
 
 We start with a repo like this:
 
-```
+```text
 Commit 0000
 |-- .keys
 |   |-- AES1#PK1
@@ -122,7 +122,7 @@ of the AES master key and ``PK<n>`` is the public key of user ``<n>``.
 
 Now, user 1 decides to add a new ``PW3`` and make changes to ``PW2``:
 
-```
+```text
 Commit 1111 (parent: 0000)
 |-- .keys
 |   |-- AES1#PK1
@@ -137,7 +137,7 @@ Commit 1111 (parent: 0000)
 In the meanwhile, user 2 adds ``PW4`` and decides to change the
 AES master password:
 
-```
+```text
 Commit 2222 (parent: 0000)
 |-- .keys
 |   |-- AES2#PK1
@@ -152,7 +152,7 @@ Commit 2222 (parent: 0000)
 Then, they both attempt to push. The second one will get a conflict
 and try to merge. But now the status would be something like:
 
-```
+```text
 |-- .keys
 |   |-- AES2#PK1           <--- The new key gets fastworwarded
 |   |-- AES2#PK2                correctly, as it was changed in 2222
