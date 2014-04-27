@@ -1,6 +1,5 @@
 import logging
 import os
-import json
 
 from cliff.command import Command
 from cliff.lister import Lister
@@ -35,6 +34,8 @@ class PMLister(PMCommandMixin, Lister):
 
 
 class Setup(PMCommand):
+    """Setup a passwords repository"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -53,6 +54,8 @@ class Setup(PMCommand):
 
 
 class UserAdd(PMCommand):
+    """Add a user"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -70,6 +73,8 @@ class UserAdd(PMCommand):
 
 
 class UserRemove(PMCommand):
+    """Remove a user"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -88,6 +93,8 @@ class UserRemove(PMCommand):
 
 
 class UserList(PMLister):
+    """List users"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -127,6 +134,8 @@ class UserList(PMLister):
 
 
 class KeyRegen(PMCommand):
+    """Regenerate AES key"""
+
     logger = logging.getLogger(__name__)
 
     def take_action(self, parsed_args):
@@ -136,15 +145,19 @@ class KeyRegen(PMCommand):
 
 
 class KeyRecrypt(PMCommand):
+    """Re-encrypt key for all the users"""
+
     logger = logging.getLogger(__name__)
 
     def take_action(self, parsed_args):
         # todo: write this (we want to get the key and
         #       re-encrypt for all users)
-        pass
+        raise NotImplementedError("Not implemented yet")
 
 
 class SecretPut(PMCommand):
+    """Put contents to a secret file"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -160,6 +173,8 @@ class SecretPut(PMCommand):
 
 
 class SecretGet(PMCommand):
+    """Get contents of a secret file"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
@@ -175,6 +190,8 @@ class SecretGet(PMCommand):
 
 
 class SecretDelete(PMCommand):
+    """Delete a secret file"""
+
     logger = logging.getLogger(__name__)
 
     def get_parser(self, prog_name):
