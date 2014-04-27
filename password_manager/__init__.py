@@ -247,16 +247,19 @@ class PasswordManager(object):
     #   High-level operations
 
     def read_secret(self, name, key=None):
-        name = self._fix_secret_name(name)
+        name = self.get_secret_filename(name)
         with open(name, 'rb') as f:
             raw_secret = self.aes_decrypt(f.read(), key=key)
-        return json.loads(raw_secret)
+        return raw_secret
 
     def write_secret(self, name, secret, key=None):
-        name = self._fix_secret_name(name)
-        secret_data = json.dumps(secret)
+        name = self.get_secret_filename(name)
         with open(name, 'wb') as f:
-            f.write(self.aes_encrypt(secret_data, key=key))
+            f.write(self.aes_encrypt(secret, key=key))
+
+    def delete_secret(self, name):
+        name = self.get_secret_filename(name)
+        os.unlink(name)
 
     def list_secrets(self):
         """Find all the files containing secrets"""
@@ -265,19 +268,21 @@ class PasswordManager(object):
         for dirpath, dirnames, filenames in os.walk(self.basedir):
             dirnames[:] = [x for x in dirnames if not x.startswith('.')]
             for filename in filenames:
-                if ((not filename.startswith('.'))
-                        and filename.endswith('.json')):
+                if self._is_secret_file(filename):
                     yield os.path.join(dirpath, filename)
 
     # ----------------------------------------------------------------------
     #   Utility functions
 
-    def _fix_secret_name(self, name):
-        if not name.endswith('.json'):
-            name += '.json'
-        name = os.path.join(self.basedir, name)
-        # todo: check that filename is in the correct path?
-        return name
+    def _is_secret_file(self, name):
+        if name.startswith('.'):
+            return False
+        if name.endswith('~'):
+            return False
+        return True
+
+    def get_secret_filename(self, name):
+        return os.path.join(self.basedir, name)
 
     def get_aes_key_filename(self, identity):
         return os.path.join(self.keydir, '{0}.key'.format(identity))

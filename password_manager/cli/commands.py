@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 
 from cliff.command import Command
 from cliff.lister import Lister
@@ -129,32 +130,58 @@ class KeyRegen(PMCommand):
     logger = logging.getLogger(__name__)
 
     def take_action(self, parsed_args):
-        pass
+        self.logger.info("Regenerating AES key")
+        pm = self._get_password_manager(parsed_args)
+        pm.regenerate_aes_key()
 
 
 class KeyRecrypt(PMCommand):
     logger = logging.getLogger(__name__)
 
     def take_action(self, parsed_args):
+        # todo: write this (we want to get the key and
+        #       re-encrypt for all users)
         pass
 
 
 class SecretPut(PMCommand):
     logger = logging.getLogger(__name__)
 
+    def get_parser(self, prog_name):
+        parser = super(SecretPut, self).get_parser(prog_name)
+        parser.add_argument('name')
+        return parser
+
     def take_action(self, parsed_args):
-        pass
+        # Read secret from the standard input and write to file
+        pm = self._get_password_manager(parsed_args)
+        data = self.app.stdin.read()
+        pm.write_secret(parsed_args.name, data)
 
 
 class SecretGet(PMCommand):
     logger = logging.getLogger(__name__)
 
+    def get_parser(self, prog_name):
+        parser = super(SecretGet, self).get_parser(prog_name)
+        parser.add_argument('name')
+        return parser
+
     def take_action(self, parsed_args):
-        pass
+        # Read secret from file input and write to stdout
+        pm = self._get_password_manager(parsed_args)
+        secret = pm.read_secret(parsed_args.name)
+        self.app.stdout.write(secret)
 
 
 class SecretDelete(PMCommand):
     logger = logging.getLogger(__name__)
 
+    def get_parser(self, prog_name):
+        parser = super(SecretDelete, self).get_parser(prog_name)
+        parser.add_argument('name')
+        return parser
+
     def take_action(self, parsed_args):
-        pass
+        pm = self._get_password_manager(parsed_args)
+        pm.delete_secret(parsed_args.name)
