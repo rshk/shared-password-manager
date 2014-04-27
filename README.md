@@ -27,3 +27,15 @@
 |   '-- user2.pub   GPG public key for user 2
 '-- *.json          Password files containing "secrets"
 ```
+
+## Installing
+
+Dependencies need to be installed from ``requirements.txt``,
+as we need to install a fork for pygpgme which is not in pypi..
+
+Plus, stevedore has some problems installing when listed
+as dependency in ``setup.py``.
+
+```
+pip install -r requirements.txt .
+```

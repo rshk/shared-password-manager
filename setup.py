@@ -1,10 +1,40 @@
 from setuptools import setup, find_packages
 
+# --- IMPORTANT ---
+# You should use requirements.txt to install this, as we
+# need to install stuff from external sources, which is
+# not supported anymore by pip!
+
 version = '0.1a'
 install_requires = [
-    'python-gnupg',
-    'pycrypto',
+    # 'pygpgme==0.3.1',  # For pubkey encryption via GPG
+    # 'pycrypto',  # For symmetric crypto via AES
+    # 'cliff',  # For the CLI
 ]
+
+dependency_links = [
+    'https://github.com/rshk/pygpgme/tarball/master#egg=pygpgme-0.3.1',
+]
+
+entry_points = {
+    'console_scripts': [
+        'password_manager = password_manager.cli:main'
+    ],
+    'password_manager.cli': [
+        'setup = password_manager.cli.commands:Setup',
+
+        'user_add = password_manager.cli.commands:UserAdd',
+        'user_remove = password_manager.cli.commands:UserRemove',
+        'user_list = password_manager.cli.commands:UserList',
+
+        'key_regen = password_manager.cli.commands:KeyRegen',
+        'key_recrypt = password_manager.cli.commands:KeyRecrypt',
+
+        'secret_put = password_manager.cli.commands:SecretPut',
+        'secret_get = password_manager.cli.commands:SecretGet',
+        'secret_delete = password_manager.cli.commands:SecretDelete',
+    ],
+}
 
 setup(
     name='PasswordManager',
@@ -17,6 +47,7 @@ setup(
     description='Directory based, multi-user, password manager',
     long_description='',
     install_requires=install_requires,
+    dependency_links=dependency_links,
     # test_suite='tests',
     classifiers=[
         "License :: OSI Approved :: Apache Software License",
@@ -43,4 +74,6 @@ setup(
         "Programming Language :: Python :: Implementation :: CPython",
         # "Programming Language :: Python :: Implementation :: PyPy",
     ],
-    package_data={'': ['README.md', 'LICENSE']})
+    package_data={'': ['README.md', 'LICENSE']},
+    zip_safe=False,
+    entry_points=entry_points)
