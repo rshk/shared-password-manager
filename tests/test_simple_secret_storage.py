@@ -49,49 +49,53 @@ def test_oneuser(tmpdir, keyfiles):
     assert pm.read_secret('hello') == secret
 
 
-@pytest.mark.skipif(True, reason='WIP')
-def test_multiple_users(tmpdir):
-    gpg_alice = gnupg.GPG(gnupghome=str(tmpdir.join('gnupg-alice')))
-    gpg_bob = gnupg.GPG(gnupghome=str(tmpdir.join('gnupg-bob')))
-    gpg_eve = gnupg.GPG(gnupghome=str(tmpdir.join('gnupg-eve')))
+def test_multiple_users(tmpdir, keyfiles):
+    gpg_alice = get_gpg(str(tmpdir.join('gnupg-alice')))
+    gpg_bob = get_gpg(str(tmpdir.join('gnupg-bob')))
+    gpg_eve = get_gpg(str(tmpdir.join('gnupg-eve')))
 
     passwords_dir = str(tmpdir.join('passwords'))
 
     for gpg in (gpg_alice, gpg_bob, gpg_eve):
-        assert len(gpg.list_keys()) == 0
-        assert len(gpg.list_keys(True)) == 0
+        assert len(list(gpg.keylist())) == 0
+        assert len(list(gpg.keylist('', True))) == 0
 
     # Import public keys in all keyrings..
 
-    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
-    for keyname in ('key1.pub', 'key2.pub', 'key3.pub'):
-        with open(os.path.join(keysdir, keyname), 'r') as f:
-            key_data = f.read()
-            for gpg in (gpg_alice, gpg_bob, gpg_eve):
-                gpg.import_keys(key_data)
+    for gpg in (gpg_alice, gpg_bob, gpg_eve):
+        for keyname in ('key1.pub', 'key2.pub', 'key3.pub'):
+            with keyfiles.open(keyname, 'rb') as fp:
+                gpg.import_(fp)
 
     # For each user's gpg home, import all public keys
 
-    with open(os.path.join(keysdir, 'key1.sec'), 'r') as f:
-        gpg_alice.import_keys(f.read())
-
-    with open(os.path.join(keysdir, 'key2.sec'), 'r') as f:
-        gpg_bob.import_keys(f.read())
-
-    with open(os.path.join(keysdir, 'key3.sec'), 'r') as f:
-        gpg_eve.import_keys(f.read())
+    for gpg, keyfile in [
+            (gpg_alice, 'key1.sec'),
+            (gpg_bob, 'key2.sec'),
+            (gpg_eve, 'key3.sec')]:
+        with keyfiles.open(keyfile) as fp:
+            gpg.import_(fp)
 
     # Verify operations
 
     for gpg in (gpg_alice, gpg_bob, gpg_eve):
-        assert len(gpg.list_keys()) == 3
-        assert len(gpg.list_keys(True)) == 1
+        assert len(list(gpg.keylist())) == 3
+        assert len(list(gpg.keylist('', True))) == 1
 
     # Keep key fingerprints in meaningful names..
 
-    gpg_fp_alice = gpg_alice.list_keys(True)[0]['fingerprint']
-    gpg_fp_bob = gpg_bob.list_keys(True)[0]['fingerprint']
-    gpg_fp_eve = gpg_eve.list_keys(True)[0]['fingerprint']
+    def _get_first_privkey_fpr(gpg):
+        all_privkeys = list(gpg.keylist('', True))
+        assert len(all_privkeys) == 1
+
+        # There should be only one subkey (the master one)
+        assert len(all_privkeys[0].subkeys) == 1
+
+        return all_privkeys[0].subkeys[0].fpr
+
+    gpg_fp_alice = _get_first_privkey_fpr(gpg_alice)
+    gpg_fp_bob = _get_first_privkey_fpr(gpg_bob)
+    gpg_fp_eve = _get_first_privkey_fpr(gpg_eve)
 
     # Make sure users have different keys!
 
