@@ -8,9 +8,13 @@ to encrypt them for multiple users.
 import json
 import os
 
-import gnupg
+# import gnupg
+import gpgme
 from Crypto.Cipher import AES
 from Crypto import Random
+
+# Keep in sync with setup.py
+__version__ = '0.1a'
 
 
 class PasswordManagerException(Exception):
@@ -36,7 +40,7 @@ class PasswordManager(object):
             we want to encrypt the AES key.
         """
 
-        if os.path.exists(self.basedir) and os.listdir(self.basedir) > 0:
+        if os.path.exists(self.basedir) and len(os.listdir(self.basedir)) > 0:
             raise ValueError("Destination directory not empty")
 
         os.makedirs(self.keydir)
@@ -177,17 +181,48 @@ class PasswordManager(object):
     # ----------------------------------------------------------------------
     #   Asymmetric (GPG) encryption handling..
 
-    def get_gpg(self):
-        # todo: we could use just one cached version..?
-        return gnupg.GPG(gnupghome=self.gpghome)
+    def _get_gpg(self):
+        # ************************************************************
+        #   WARNING!
+        #   In order to support using multiple gnupg homes, we need
+        #   to keep swapping os.environ['GNUPGHOME'], but this is
+        #   sub-optimal as the context will always use the current
+        #   ``GNUPGHOME``, not just the one set at initialization!
+        # ************************************************************
+        if self.gnupghome is None:
+            os.environ.pop('GNUPGHOME', None)  # use default
+        else:
+            os.environ['GNUPGHOME'] = self.gnupghome
+        return gpgme.Context()
+
+    def _get_key_fingerprint(self, name):
+        """
+        Get the fingerprint for a given key.
+
+        :param name: either key fingerprint, id, or identity name
+        """
+
+        gpg = self._get_gpg()
+        key = gpg.get_key(name)
+        # Return fingerprint of the first (main) sub-key
+        return key.subkeys[0].fpr
 
     def list_gpg_privkeys(self):
         """List fingerprints of our private GPG keys"""
 
-        return [x['fingerprint'] for x in self.get_gpg().list_keys(True)]
+        for key in self._get_gpg().keylist('', True):
+            yield key.subkeys[0].fpr
+
+    def list_gpg_pubkeys(self):
+        """List fingerprints of public keys in our keyring"""
+
+        for key in self._get_gpg().keylist():
+            yield key.subkeys[0].fpr
 
     def store_gpg_pubkey(self, identity):
         """Export a GPG public key"""
+
+        identity = self._get_key_fingerprint(identity)
 
         gpg = self.get_gpg()
         exported = gpg.export_keys(identity)
@@ -195,11 +230,12 @@ class PasswordManager(object):
             f.write(exported)
 
     def import_all_pubkeys(self):
-        gpg = self.get_gpg()
+        # todo: do this in a better way
+        gpg = self._get_gpg()
         for identity in self.list_identities():
             pubkeyfile = self.get_gpg_pubkey_filename(identity)
             with open(pubkeyfile, 'rb') as f:
-                gpg.import_keys(f.read())
+                gpg.import_(f.read())
 
     # ----------------------------------------------------------------------
     #   High-level operations
