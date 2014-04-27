@@ -182,18 +182,14 @@ class PasswordManager(object):
     #   Asymmetric (GPG) encryption handling..
 
     def _get_gpg(self):
-        # ************************************************************
-        #   WARNING!
-        #   In order to support using multiple gnupg homes, we need
-        #   to keep swapping os.environ['GNUPGHOME'], but this is
-        #   sub-optimal as the context will always use the current
-        #   ``GNUPGHOME``, not just the one set at initialization!
-        # ************************************************************
-        if self.gnupghome is None:
-            os.environ.pop('GNUPGHOME', None)  # use default
-        else:
-            os.environ['GNUPGHOME'] = self.gnupghome
-        return gpgme.Context()
+        """
+        Get a gpgme Context instance, with correct gnupghome set
+        """
+
+        ctx = gpgme.Context()
+        if self.gnupghome is not None:
+            ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, self.gnupghome)
+        return ctx
 
     def _get_key_fingerprint(self, name):
         """
