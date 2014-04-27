@@ -60,7 +60,7 @@ class PasswordManager(object):
             self.store_gpg_pubkey(identity)
 
         # Just to try things, let's create a new encrypted file..
-        hello = {'username': 'Hello', 'password': 'Word'}
+        hello = json.dumps({'username': 'Hello', 'password': 'Word'})
         self.write_secret('example', hello)
         assert self.read_secret('example') == hello
 

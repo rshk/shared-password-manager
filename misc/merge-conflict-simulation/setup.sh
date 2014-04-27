@@ -10,13 +10,13 @@ TEMPDIR="$( mktemp -d )"
 cd "${TEMPDIR}"
 
 cat <<EOF
-----------------------------------------------------------------------
+**********************************************************************
 
     STARTING SETUP IN 3 SECONDS
 
     Workdir: ${TEMPDIR}
 
-----------------------------------------------------------------------
+**********************************************************************
 EOF
 
 sleep 3
@@ -57,8 +57,10 @@ echo "----------------------------------------------------------------------"
 mkdir -p "${TEMPDIR}/passwords"
 cd "${TEMPDIR}/passwords"
 
+PM="${TEMPDIR}/venv/bin/password_manager"
+
 export GNUPGHOME="${TEMPDIR}/gnupghome-1"
-"${TEMPDIR}/venv/bin/password_manager" setup \
+"${PM}" setup \
     "$( cat ${REPOROOT}/tests/keys/key1.fpr )" \
     "$( cat ${REPOROOT}/tests/keys/key2.fpr )"
 
@@ -68,8 +70,8 @@ echo "    Create some secrets"
 echo "----------------------------------------------------------------------"
 
 export GNUPGHOME="${TEMPDIR}/gnupghome-1"
-echo "Secret1" | "${TEMPDIR}/venv/bin/password_manager" secret put PW1
-echo "Secret2" | "${TEMPDIR}/venv/bin/password_manager" secret put PW2
+echo "Secret1" | "${PM}" secret put PW1
+echo "Secret2" | "${PM}" secret put PW2
 
 
 echo "----------------------------------------------------------------------"
