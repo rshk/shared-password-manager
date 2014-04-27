@@ -9,8 +9,9 @@ Tests for password manager
 
 import os
 import json
+from io import BytesIO
 
-import gnupg
+import gpgme
 
 from Crypto.Cipher import AES
 from Crypto import Random
@@ -21,9 +22,6 @@ def test_encrypt_key_between_users(tmpdir):
     Test that the basic functionality of sharing an encrypted
     symmetric key between two users works as intended..
     """
-
-    gpg1 = gnupg.GPG(gnupghome=str(tmpdir.join('gpg-1')))
-    gpg2 = gnupg.GPG(gnupghome=str(tmpdir.join('gpg-2')))
 
     keysdir = os.path.join(os.path.dirname(__file__), 'keys')
 
@@ -45,15 +43,32 @@ def test_encrypt_key_between_users(tmpdir):
     # Both users have both public keys, but each has only
     # its own secret key..
 
-    gpg1.import_keys(gpg_key1_sec)
-    gpg1.import_keys(gpg_key1_pub)
-    gpg1.import_keys(gpg_key2_pub)
-    key1_fp = gpg1.list_keys(True)[0]['fingerprint']
+    gpg_home_1 = str(tmpdir.join('gpg-1'))
+    gpg_home_2 = str(tmpdir.join('gpg-2'))
 
-    gpg2.import_keys(gpg_key2_sec)
-    gpg2.import_keys(gpg_key1_pub)
-    gpg2.import_keys(gpg_key2_pub)
-    key2_fp = gpg2.list_keys(True)[0]['fingerprint']
+    # WARNING! If we don't create directories first, things
+    # will just fail silently and it would appear that the key
+    # wasn't read at all..
+    os.makedirs(gpg_home_1)
+    os.makedirs(gpg_home_2)
+
+    gpg = gpgme.Context()
+
+    os.environ['GNUPGHOME'] = gpg_home_1
+    assert len(list(gpg.keylist())) == 0  # Keyring must be empty
+
+    gpg.import_(BytesIO(gpg_key1_sec))
+    gpg.import_(BytesIO(gpg_key1_pub))
+    gpg.import_(BytesIO(gpg_key2_pub))
+    key1_fp = list(gpg.keylist('', True))[0].subkeys[0].fpr
+
+    os.environ['GNUPGHOME'] = gpg_home_2
+    assert len(list(gpg.keylist())) == 0  # Keyring must be empty
+
+    gpg.import_(BytesIO(gpg_key2_sec))
+    gpg.import_(BytesIO(gpg_key1_pub))
+    gpg.import_(BytesIO(gpg_key2_pub))
+    key2_fp = list(gpg.keylist('', True))[0].subkeys[0].fpr
 
     assert key1_fp != key2_fp
 
@@ -64,12 +79,18 @@ def test_encrypt_key_between_users(tmpdir):
     # Store password encrypted for the two users
 
     with open(str(tmpdir.join('aes-key-1.key')), 'wb') as f:
-        enc = gpg1.encrypt(aes_key, key1_fp, always_trust=True)
-        f.write(str(enc))
+        os.environ['GNUPGHOME'] = gpg_home_1
+        _io = BytesIO()
+        key = gpg.get_key(key1_fp)
+        gpg.encrypt([key], gpgme.ENCRYPT_ALWAYS_TRUST, BytesIO(aes_key), _io)
+        f.write(str(_io.getvalue()))
 
     with open(str(tmpdir.join('aes-key-2.key')), 'wb') as f:
-        enc = gpg2.encrypt(aes_key, key2_fp, always_trust=True)
-        f.write(str(enc))
+        os.environ['GNUPGHOME'] = gpg_home_1
+        _io = BytesIO()
+        key = gpg.get_key(key2_fp)
+        gpg.encrypt([key], gpgme.ENCRYPT_ALWAYS_TRUST, BytesIO(aes_key), _io)
+        f.write(str(_io.getvalue()))
 
     # Now use the AES password to write a couple files
 
@@ -89,10 +110,14 @@ def test_encrypt_key_between_users(tmpdir):
     # This is user 1, geting its aes key and using it to access the file.
 
     with open(str(tmpdir.join('aes-key-1.key')), 'rb') as f:
-        dec_aes_key = gpg1.decrypt(f.read())
+        os.environ['GNUPGHOME'] = gpg_home_1
+        _io = BytesIO()
+
+        gpg.decrypt(f, _io)
+
         # Note: using str(dec_aes_key) will try to decode unicode
         # but the key is binary
-        my_aes_key = dec_aes_key.data
+        my_aes_key = _io.getvalue()
 
     with open(os.path.join(passwords_dir, 'example.txt'), 'rb') as f:
         enc_data = f.read()
