@@ -11,66 +11,85 @@ import os
 import json
 from io import BytesIO
 
+import pytest
+
 import gpgme
 
 from Crypto.Cipher import AES
 from Crypto import Random
 
 
-def test_encrypt_key_between_users(tmpdir):
+def _get_gpg(home):
+    os.environ['GNUPGHOME'] = '/path/to/invalid'  # To be safe..
+    if not os.path.exists(home):
+        os.makedirs(home)
+    ctx = gpgme.Context()
+    ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, home)
+    return ctx
+
+
+@pytest.fixture
+def keyfiles():
+    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
+
+    class KeyFiles(object):
+        def __init__(self, keysdir):
+            self.keysdir = keysdir
+
+        def open(self, name, mode='rb'):
+            return open(os.path.join(self.keysdir, name), mode)
+
+    return KeyFiles(keysdir)
+
+
+def test_encrypt_key_between_users(tmpdir, keyfiles):
     """
     Test that the basic functionality of sharing an encrypted
     symmetric key between two users works as intended..
     """
 
-    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
+    # Initialize a couple GPG contexts
 
-    # Read + import RSA keys from files, as generating them on the fly
-    # would be quite expensive..
+    gpg1 = _get_gpg(str(tmpdir.join('gpg-1')))
+    gpg2 = _get_gpg(str(tmpdir.join('gpg-2')))
 
-    with open(os.path.join(keysdir, 'key1.pub'), 'r') as f:
-        gpg_key1_pub = f.read()
+    # Make sure keyrings are empty
 
-    with open(os.path.join(keysdir, 'key1.sec'), 'r') as f:
-        gpg_key1_sec = f.read()
+    for gpg in (gpg1, gpg2):
+        assert len(list(gpg.keylist())) == 0
+        assert len(list(gpg.keylist('', True))) == 0
 
-    with open(os.path.join(keysdir, 'key2.pub'), 'r') as f:
-        gpg_key2_pub = f.read()
+    # Import public keys in both contexts
 
-    with open(os.path.join(keysdir, 'key2.sec'), 'r') as f:
-        gpg_key2_sec = f.read()
+    for gpg in (gpg1, gpg2):
+        for name in ('key1.pub', 'key2.pub'):
+            with keyfiles.open(name, 'rb') as fp:
+                gpg.import_(fp)
 
-    # Both users have both public keys, but each has only
-    # its own secret key..
+    # Import secret keys, one per user..
 
-    gpg_home_1 = str(tmpdir.join('gpg-1'))
-    gpg_home_2 = str(tmpdir.join('gpg-2'))
+    with keyfiles.open('key1.sec', 'rb') as fp:
+        gpg1.import_(fp)
 
-    # WARNING! If we don't create directories first, things
-    # will just fail silently and it would appear that the key
-    # wasn't read at all..
-    os.makedirs(gpg_home_1)
-    os.makedirs(gpg_home_2)
+    with keyfiles.open('key2.sec', 'rb') as fp:
+        gpg2.import_(fp)
 
-    gpg = gpgme.Context()
+    # Make sure we have the correct number of keys
 
-    os.environ['GNUPGHOME'] = gpg_home_1
-    assert len(list(gpg.keylist())) == 0  # Keyring must be empty
+    for gpg in (gpg1, gpg2):
+        assert len(list(gpg.keylist())) == 2
+        assert len(list(gpg.keylist('', True))) == 1
 
-    gpg.import_(BytesIO(gpg_key1_sec))
-    gpg.import_(BytesIO(gpg_key1_pub))
-    gpg.import_(BytesIO(gpg_key2_pub))
-    key1_fp = list(gpg.keylist('', True))[0].subkeys[0].fpr
+    # Get fingerprints of secret key
 
-    os.environ['GNUPGHOME'] = gpg_home_2
-    assert len(list(gpg.keylist())) == 0  # Keyring must be empty
-
-    gpg.import_(BytesIO(gpg_key2_sec))
-    gpg.import_(BytesIO(gpg_key1_pub))
-    gpg.import_(BytesIO(gpg_key2_pub))
-    key2_fp = list(gpg.keylist('', True))[0].subkeys[0].fpr
+    key1_fp = list(gpg1.keylist('', True))[0].subkeys[0].fpr
+    key2_fp = list(gpg2.keylist('', True))[0].subkeys[0].fpr
 
     assert key1_fp != key2_fp
+
+    # ------------------------------------------------------------
+    #   Let's now proceed with AES encryption..
+    # ------------------------------------------------------------
 
     # Generate a 32bit AES key, for encrypting files
 
@@ -78,53 +97,128 @@ def test_encrypt_key_between_users(tmpdir):
 
     # Store password encrypted for the two users
 
-    with open(str(tmpdir.join('aes-key-1.key')), 'wb') as f:
-        os.environ['GNUPGHOME'] = gpg_home_1
-        _io = BytesIO()
-        key = gpg.get_key(key1_fp)
-        gpg.encrypt([key], gpgme.ENCRYPT_ALWAYS_TRUST, BytesIO(aes_key), _io)
-        f.write(str(_io.getvalue()))
+    for gpg, keyfp, outfile in [
+            (gpg1, key1_fp, 'aes-key-1.key'),
+            (gpg2, key2_fp, 'aes-key-2.key'),
+            ]:
+        with open(str(tmpdir.join(outfile)), 'wb') as fp:
+            key = gpg.get_key(keyfp)  # Get encryption key
+            flags = gpgme.ENCRYPT_ALWAYS_TRUST
+            gpg.encrypt([key], flags, BytesIO(aes_key), fp)
 
-    with open(str(tmpdir.join('aes-key-2.key')), 'wb') as f:
-        os.environ['GNUPGHOME'] = gpg_home_1
-        _io = BytesIO()
-        key = gpg.get_key(key2_fp)
-        gpg.encrypt([key], gpgme.ENCRYPT_ALWAYS_TRUST, BytesIO(aes_key), _io)
-        f.write(str(_io.getvalue()))
-
-    # Now use the AES password to write a couple files
+    # Now use the AES password to write an encrypted file..
 
     passwords_dir = str(tmpdir.join('passwords'))
     os.makedirs(passwords_dir)
 
-    data = json.dumps({'secret': 'This is a secret!'})
+    secret = {'secret': 'This is a secret!'}
+    secret_data = json.dumps(secret)
+
     iv = Random.new().read(AES.block_size)
     cipher = AES.new(aes_key, AES.MODE_CFB, iv)
-    packed = iv + cipher.encrypt(data.encode('utf-8'))
+    packed = iv + cipher.encrypt(secret_data.encode('utf-8'))
 
-    with open(os.path.join(passwords_dir, 'example.txt'), 'wb') as f:
-        f.write(packed)
+    with open(os.path.join(passwords_dir, 'example.txt'), 'wb') as fp:
+        fp.write(packed)
 
-    # Ok. It's time for the users to access their own data..
+    #   Let's pretend we forgot everything now! :)
 
-    # This is user 1, geting its aes key and using it to access the file.
+    del iv, cipher, packed, aes_key
 
-    with open(str(tmpdir.join('aes-key-1.key')), 'rb') as f:
-        os.environ['GNUPGHOME'] = gpg_home_1
+    # ------------------------------------------------------------
+    #   Now the users want to get their data back
+    # ------------------------------------------------------------
+
+    # Get the AES key by GPG-decrypting it
+
+    with open(str(tmpdir.join('aes-key-1.key')), 'rb') as fp:
+        # Decrypt the key from file
         _io = BytesIO()
+        gpg1.decrypt(fp, _io)
 
-        gpg.decrypt(f, _io)
+        aes_key = _io.getvalue()
 
-        # Note: using str(dec_aes_key) will try to decode unicode
-        # but the key is binary
-        my_aes_key = _io.getvalue()
+    # Get AES encrypted data
 
-    with open(os.path.join(passwords_dir, 'example.txt'), 'rb') as f:
-        enc_data = f.read()
+    with open(os.path.join(passwords_dir, 'example.txt'), 'rb') as fp:
+        enc_data = fp.read()
 
-    my_iv = enc_data[:AES.block_size]
-    my_msg = enc_data[AES.block_size:]
-    cypher1 = AES.new(my_aes_key, AES.MODE_CFB, my_iv)
-    msg = cypher1.decrypt(my_msg)
-    loaded = json.loads(msg)
-    assert loaded == {'secret': 'This is a secret!'}
+    iv, msg = enc_data[:AES.block_size], enc_data[AES.block_size:]
+
+    cypher = AES.new(aes_key, AES.MODE_CFB, iv)
+
+    # Decrypt / decode message and check
+
+    decoded = cypher.decrypt(msg)
+    assert decoded == secret_data
+
+    loaded = json.loads(decoded)
+    assert loaded == secret
+
+
+def test_gpg_multiple_homes(tmpdir):
+    """Make sure we can use multiple GPG contexts"""
+
+    os.environ['GNUPGHOME'] = '/no/such/dir'
+    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
+
+    for userid in (1, 2):
+        # Create a directory for user's pgp stuff..
+        gpg_home = str(tmpdir.join('gpg-{0}'.format(userid)))
+        os.makedirs(gpg_home)
+
+        ctx = gpgme.Context()
+
+        # We have no keys yet
+        assert len(list(ctx.keylist())) == 0
+
+        # Configure GNUPGHOME for this context
+        ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, gpg_home)
+
+        # Import public keys and check
+        for name in ('key1.pub', 'key2.pub'):
+            with open(os.path.join(keysdir, name), 'rb') as fp:
+                ctx.import_(fp)
+
+        assert len(list(ctx.keylist())) == 2
+        assert len(list(ctx.keylist('', True))) == 0
+
+        # Import private key and check
+        keyfile = os.path.join(keysdir, 'key{0}.sec'.format(userid))
+        with open(keyfile, 'r') as fp:
+            ctx.import_(fp)
+
+        assert len(list(ctx.keylist())) == 2
+        assert len(list(ctx.keylist('', True))) == 1
+
+
+def test_aes_encryption():
+    secret = {'secret': 'This is a secret!'}
+    secret_data = json.dumps(secret)
+
+    aes_key = 'This is a key123'  # 128bit key
+
+    # Generate initialization vector for AES
+    iv = Random.new().read(AES.block_size)
+    assert len(iv) == AES.block_size
+
+    # Initialize AES cipher
+    cipher = AES.new(aes_key, AES.MODE_CFB, iv)
+
+    # Prepare a packed string containing IV + crypto text
+    packed = iv + cipher.encrypt(secret_data.encode('utf-8'))
+
+    del iv, cipher
+
+    # ---------- time to get the message back! ----------
+
+    iv = packed[:AES.block_size]
+    msg = packed[AES.block_size:]
+
+    cypher = AES.new(aes_key, AES.MODE_CFB, iv)
+
+    decrypted = cypher.decrypt(msg)
+    assert decrypted == secret_data
+
+    loaded = json.loads(decrypted)
+    assert loaded == secret
