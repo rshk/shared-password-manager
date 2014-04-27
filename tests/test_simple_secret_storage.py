@@ -1,6 +1,3 @@
-import os
-
-import gpgme
 import pytest
 
 from password_manager import PasswordManager, PasswordManagerException

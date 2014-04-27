@@ -31,6 +31,11 @@ class PasswordManager(object):
     def keydir(self):
         return os.path.join(self.basedir, '.keys')
 
+    @property
+    def gpg(self):
+        # todo: cache on a per-gpghome basis?
+        return self._get_gpg()
+
     def setup(self, identities):
         """
         Prepare the configured directory for use by the password
@@ -40,6 +45,8 @@ class PasswordManager(object):
             fingerprints of the keys of the initial users for which
             we want to encrypt the AES key.
         """
+
+        identities = [self.get_key_fingerprint(x) for x in identities]
 
         if os.path.exists(self.basedir) and len(os.listdir(self.basedir)) > 0:
             raise ValueError("Destination directory not empty")
@@ -68,11 +75,26 @@ class PasswordManager(object):
         - encrypt the AES key using the selected public key
         """
 
-        self.store_gpg_pubkey(identity)
+        # Note: if we are adding another user for which we have
+        #       a private key, we risk trying to decrypt it with
+        #       the wrong key!
+
+        identity = self.get_key_fingerprint(identity)
         aes_key = self.get_aes_key()
         self.write_aes_key(aes_key, identity)
+        self.store_gpg_pubkey(identity)
 
-    def delete_identity(self, identity):
+    def list_identities(self):
+        """List GPG fingerprints for the configured users"""
+
+        for name in os.listdir(self.keydir):
+            if name.startswith('.'):
+                continue
+            if name.endswith('.pub'):
+                yield name[:-4]
+
+    def remove_identity(self, identity):
+        identity = self.get_key_fingerprint(identity)
         os.unlink(self.get_aes_key_filename(identity))
         os.unlink(self.get_gpg_pubkey_filename(identity))
         self.regenerate_aes_key()
@@ -168,15 +190,6 @@ class PasswordManager(object):
         cipher = AES.new(key, AES.MODE_CFB, enc_iv)
         return cipher.decrypt(enc_msg)
 
-    def list_identities(self):
-        """List GPG fingerprints for the configured users"""
-
-        for name in os.listdir(os.path.join(self.basedir, '.keys')):
-            if name.startswith('.'):
-                continue
-            if name.endswith('.pub'):
-                yield name[:-4]
-
     # ----------------------------------------------------------------------
     #   Asymmetric (GPG) encryption handling..
 
@@ -190,7 +203,7 @@ class PasswordManager(object):
             ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, self.gpghome)
         return ctx
 
-    def _get_key_fingerprint(self, name):
+    def get_key_fingerprint(self, name):
         """
         Get the fingerprint for a given key.
 
@@ -217,13 +230,13 @@ class PasswordManager(object):
     def store_gpg_pubkey(self, identity):
         """Export a GPG public key"""
 
-        identity = self._get_key_fingerprint(identity)
+        identity = self.get_key_fingerprint(identity)
         gpg = self._get_gpg()
         with open(self.get_gpg_pubkey_filename(identity), 'wb') as fp:
             gpg.export(identity, fp)
 
     def import_all_pubkeys(self):
-        # todo: do this in a better way
+        # todo: do this in a better way!
         gpg = self._get_gpg()
         for identity in self.list_identities():
             pubkeyfile = self.get_gpg_pubkey_filename(identity)
