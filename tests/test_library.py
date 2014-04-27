@@ -2,44 +2,21 @@
 Tests for password manager
 """
 
-# gpg = GPG(gnupghome="keys")
-# input = gpg.gen_key_input()
-# result = gpg.gen_key(input)
-# print1 = result.fingerprint
-
 import os
 import json
 from io import BytesIO
 
-import pytest
+# import pytest
 
 import gpgme
 
 from Crypto.Cipher import AES
 from Crypto import Random
 
-
-def _get_gpg(home):
-    os.environ['GNUPGHOME'] = '/path/to/invalid'  # To be safe..
-    if not os.path.exists(home):
-        os.makedirs(home)
-    ctx = gpgme.Context()
-    ctx.set_engine_info(gpgme.PROTOCOL_OpenPGP, None, home)
-    return ctx
+from utils import get_gpg
 
 
-@pytest.fixture
-def keyfiles():
-    keysdir = os.path.join(os.path.dirname(__file__), 'keys')
-
-    class KeyFiles(object):
-        def __init__(self, keysdir):
-            self.keysdir = keysdir
-
-        def open(self, name, mode='rb'):
-            return open(os.path.join(self.keysdir, name), mode)
-
-    return KeyFiles(keysdir)
+_get_gpg = get_gpg
 
 
 def test_encrypt_key_between_users(tmpdir, keyfiles):
