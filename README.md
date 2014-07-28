@@ -7,6 +7,7 @@ Basically, this program handles encrypting files with a symmetric
 encrypted using public keys (via GPG) of the users that are allowed
 to access them.
 
+
 ## Installation
 
 Unfortunately, there are some issues preventing the project from
@@ -21,6 +22,12 @@ pip install -r requirements.txt .
 ```
 
 Also requiremes libgpgme, which should be packaged for most distros.
+
+### Debian (tested on Jessie)
+
+```
+apt-get install libgpgme11 libgpgme11-dev
+```
 
 
 ## Example usage
