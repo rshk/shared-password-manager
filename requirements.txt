@@ -1,3 +1,0 @@
-pycrypto
-cliff
-https://github.com/rshk/pygpgme/tarball/v0.3.1

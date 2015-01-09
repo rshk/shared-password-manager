@@ -1,15 +1,10 @@
 from setuptools import setup, find_packages
 
-# --- IMPORTANT ---
-# You should use requirements.txt to install this, as we
-# need to install stuff from external sources, which is
-# not supported anymore by pip!
-
 version = '0.1a'
 install_requires = [
-    # 'pygpgme==0.3.1',  # For pubkey encryption via GPG
-    # 'pycrypto',  # For symmetric crypto via AES
-    # 'cliff',  # For the CLI
+    'pygpgme',  # For pubkey encryption via GPG
+    'pycrypto',  # For symmetric crypto via AES
+    'cliff',  # For the CLI
 ]
 
 dependency_links = [
