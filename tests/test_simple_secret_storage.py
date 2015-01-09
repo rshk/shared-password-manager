@@ -40,7 +40,7 @@ def test_oneuser(tmpdir, keyfiles):
 
     assert list(pm.list_identities()) == [privkey]
 
-    secret = {'hello': 'World'}
+    secret = "{'hello': 'World'}"
     pm.write_secret('hello', secret)
 
     assert pm.read_secret('hello') == secret
@@ -112,13 +112,12 @@ def test_multiple_users(tmpdir, keyfiles):
     # Alice creates a new password manager.
 
     pm_alice.setup([gpg_fp_alice, gpg_fp_bob])
-    pm_alice.write_secret('secret1', {'username': 'alice', 'password': '1234'})
-    assert pm_alice.read_secret('secret1') == {
-        'username': 'alice', 'password': '1234'}
+    secret = "{'username': 'alice', 'password': '1234'}"
+    pm_alice.write_secret('secret1', secret)
+    assert pm_alice.read_secret('secret1') == secret
 
     # And Bob is able to read the secret too..
-    assert pm_bob.read_secret('secret1') == {
-        'username': 'alice', 'password': '1234'}
+    assert pm_bob.read_secret('secret1') == secret
 
     # But Eve cannot. Yet
     with pytest.raises(PasswordManagerException):
@@ -128,27 +127,23 @@ def test_multiple_users(tmpdir, keyfiles):
     pm_alice.add_identity(gpg_fp_eve)
 
     # Now Eve can read too..
-    assert pm_eve.read_secret('secret1') == {
-        'username': 'alice', 'password': '1234'}
+    assert pm_eve.read_secret('secret1') == secret
 
     # But then Alice changes her mind
-    pm_alice.delete_identity(gpg_fp_eve)
+    pm_alice.remove_identity(gpg_fp_eve)
 
-    assert pm_alice.read_secret('secret1') == {
-        'username': 'alice', 'password': '1234'}
-    assert pm_bob.read_secret('secret1') == {
-        'username': 'alice', 'password': '1234'}
+    assert pm_alice.read_secret('secret1') == secret
+    assert pm_bob.read_secret('secret1') == secret
 
     # Eve cannot read password anymore.
     with pytest.raises(PasswordManagerException):
         pm_eve.read_secret('secret1')
 
     # Btw, Alice things it would be better to change password too..
-    pm_alice.write_secret('secret1', {'username': 'alice', 'password': '4321'})
+    secret = "{'username': 'alice', 'password': '4321'}"
+    pm_alice.write_secret('secret1', secret)
 
-    assert pm_alice.read_secret('secret1') == {
-        'username': 'alice', 'password': '4321'}
-    assert pm_bob.read_secret('secret1') == {
-        'username': 'alice', 'password': '4321'}
+    assert pm_alice.read_secret('secret1') == secret
+    assert pm_bob.read_secret('secret1') == secret
     with pytest.raises(PasswordManagerException):
         pm_eve.read_secret('secret1')
